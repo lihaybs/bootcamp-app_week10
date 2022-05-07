@@ -9,7 +9,7 @@ stages:
     jobs:
       - job: BuildAndPushContainer
         pool:
-          name: my-pool
+          name: BuildPool
         workspace:
           clean: all
         steps:
@@ -34,7 +34,7 @@ stages:
       - deployment: production
         displayName: Deploy to aks
         pool:
-          name: my-pool
+          name: BuildPool
         environment: aks
         strategy:
           runOnce:
