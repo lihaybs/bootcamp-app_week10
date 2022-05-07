@@ -1,0 +1,68 @@
+name: build_$(Date:yyyyMMdd)$(Rev:r)
+
+trigger:
+  - main
+
+stages:
+  # Continuous Integration Process
+  - stage: CI
+    jobs:
+      - job: BuildAndPushContainer
+        pool:
+          name: BuildPool
+        workspace:
+          clean: all
+        steps:
+          - task: Docker@2
+            inputs:
+              containerRegistry: "acr"
+              command: "login"
+          - script: docker rmi acrforapp.azurecr.io/myrepo:latest
+
+          - task: Docker@2
+            inputs:
+              containerRegistry: "acr"
+              repository: "myrepo"
+              command: "buildAndPush"
+              Dockerfile: "**/Dockerfile"
+              tags: "latest"
+
+  # Continuous Deployment Process for Staging Environment
+  - stage: DeployToStaging
+
+    jobs:
+      - deployment: production
+        displayName: Deploy to aks
+        pool:
+          name: BuildPool
+        environment: aks
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - script: |
+                    kubectl delete secret app-secret
+                    kubectl create secret generic app-secret \
+                    --from-literal=PORT=80 \
+                    --from-literal=HOST=0.0.0.0 \
+                    --from-literal=COOKIE_ENCRYPT_PWD=$(COOKIE_ENCRYPT_PWD) \
+                    --from-literal=NODE_ENV=$(NODE_ENV) \
+                    --from-literal=HOST_URL=$(HOST_URL) \
+                    --from-literal=OKTA_ORG_URL=$(OKTA_ORG_URL) \
+                    --from-literal=OKTA_CLIENT_ID=$(OKTA_CLIENT_ID) \
+                    --from-literal=OKTA_CLIENT_SECRET=$(OKTA_CLIENT_SECRET) \
+                    --from-literal=PGHOST=$(PG_HOST) \
+                    --from-literal=PGUSERNAME=$(PG_USER) \
+                    --from-literal=PGDATABASE=$(PG_USER) \
+                    --from-literal=PGPASSWORD=$(PG_PASS) \
+                    --from-literal=PGPORT=5432
+                  displayName: create env
+
+                - script: |
+                    kubectl apply -f kubernates/manifests/postgres-statefulset.yaml
+
+                    kubectl apply -f kubernates/manifests/service.yaml 
+                    kubectl apply -f kubernates/manifests/ingress.yaml
+                    kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.2.0/deploy/static/provider/cloud/deploy.yaml
+                  displayName: pull image and apply
+                - script: kubectl apply -f kubernates/manifests/deployment.yaml
