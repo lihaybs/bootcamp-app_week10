@@ -16,7 +16,7 @@ spec:
       terminationGracePeriodSeconds: 10
       containers:
         - name: postgresql-db
-          image: postgres
+          image: postgres:12.2
           env:
             - name: POSTGRES_PASSWORD
               valueFrom:
